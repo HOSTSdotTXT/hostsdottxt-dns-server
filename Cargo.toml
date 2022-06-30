@@ -7,8 +7,12 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+dotenvy = "0.15.1"
 fast_log = "1.5.17"
 futures-util = "0.3.21"
+hostname = "0.3.1"
+lazy_static = "1.4.0"
 log = "0.4.17"
+sqlx = { version = "0.6.0", features = ["postgres", "runtime-tokio-rustls"] }
 tokio = { version = "1.19.2", features = ["full"] }
 trust-dns-proto = "0.21.2"
