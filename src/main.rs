@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::net::UdpSocket;
 use trust_dns_proto::op::{Message, MessageType, ResponseCode};
-use trust_dns_proto::rr::rdata::SOA;
+use trust_dns_proto::rr::rdata::{SOA, TXT};
 use trust_dns_proto::rr::{DNSClass, Name, RData, Record, RecordType};
 use trust_dns_proto::udp::UdpStream;
 use trust_dns_proto::xfer::SerialMessage;
@@ -216,6 +216,9 @@ async fn handle_message(
                                 None
                             }
                         },
+                        RecordType::TXT => {
+                            Some(RData::TXT(TXT::new(vec![r.content.clone()])))
+                        }
                         RecordType::SOA => match parse_soa(&r.content) {
                             Ok(soa) => Some(RData::SOA(soa)),
                             Err(_) => {
