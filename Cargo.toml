@@ -1,12 +1,13 @@
 [package]
 name = "dns-server"
-version = "0.1.6"
+version = "0.1.9"
 edition = "2021"
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+deadpool-postgres = "0.10.2"
 dotenvy = "0.15.1"
 env_logger = "0.9.0"
 futures-util = "0.3.21"
@@ -15,4 +16,5 @@ lazy_static = "1.4.0"
 log = "0.4.17"
 sqlx = { git = "https://github.com/launchbadge/sqlx", features = ["postgres", "runtime-tokio-rustls", "ipnetwork"] }
 tokio = { version = "1.19.2", features = ["full"] }
+tokio-postgres = "0.7.6"
 trust-dns-proto = "0.21.2"

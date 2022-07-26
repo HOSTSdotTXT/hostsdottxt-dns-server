@@ -11,7 +11,7 @@ FROM scratch AS bin
 COPY --from=builder /src/target/release/dns-server /dns-server
 
 
-FROM debian:buster AS deb-builder
+FROM debian:bullseye AS deb-builder
 ARG VERSION
 WORKDIR /root/
 COPY pkg/ /root/pkg/

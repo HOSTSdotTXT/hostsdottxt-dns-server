@@ -1,14 +1,14 @@
+use deadpool_postgres::{Manager, ManagerConfig, Pool};
 use futures_util::StreamExt;
 use lazy_static::lazy_static;
 use sqlx::postgres::PgPoolOptions;
-use sqlx::FromRow;
-use sqlx::{Pool, Postgres};
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::net::UdpSocket;
+use tokio_postgres::NoTls;
 use trust_dns_proto::op::{Message, MessageType, ResponseCode};
 use trust_dns_proto::rr::rdata::{SOA, TXT};
 use trust_dns_proto::rr::{DNSClass, Name, RData, Record, RecordType};
@@ -26,10 +26,9 @@ lazy_static! {
         "INSERT INTO queries (ip, qname, qtype, rcode, duration_us, host) VALUES ($1, $2, $3, $4, $5, $6)";
 }
 
-#[derive(Clone, FromRow)]
+#[derive(Clone)]
 pub struct FdnsRecord {
     pub name: String,
-    #[sqlx(rename = "type")]
     pub record_type: String,
     pub content: String,
     pub ttl: i32,
@@ -60,13 +59,14 @@ async fn main() {
         option_env!("CARGO_PKG_VERSION").unwrap_or_else(|| "unknown")
     );
 
-    let pg_pool = Arc::new(
-        PgPoolOptions::new()
-            .max_connections(12)
-            .connect(&env::var("DATABASE_URL").expect("DATABASE_URL not set"))
-            .await
-            .unwrap(),
-    );
+    let pg_config =
+        tokio_postgres::Config::from_str(&env::var("DATABASE_URL").expect("DATABASE_URL not set"))
+            .unwrap();
+    let mgr_config = ManagerConfig {
+        recycling_method: deadpool_postgres::RecyclingMethod::Fast,
+    };
+    let mgr = Manager::from_config(pg_config, NoTls, mgr_config);
+    let pg_pool = Arc::new(Pool::builder(mgr).max_size(64).build().unwrap());
     log::info!("Connected to data postgres");
 
     let metrics_pool = Arc::new(
@@ -143,11 +143,12 @@ async fn main() {
 
 async fn handle_message(
     raw_message: SerialMessage,
-    postgres: &Pool<Postgres>,
+    postgres: &Arc<Pool>,
     sender: Arc<Mutex<BufDnsStreamHandle>>,
 ) -> Result<Metrics, ()> {
     let src = raw_message.addr();
     let start = Instant::now();
+    let postgres_t = postgres.get();
     log::debug!("Recieved packet from {src}");
 
     let mut message = match Message::from_vec(raw_message.bytes()) {
@@ -166,12 +167,18 @@ async fn handle_message(
     let qname = query.name().to_string().to_lowercase();
     let qtype = query.query_type().to_string();
     log::trace!("[{}] Querying for {qname}", message.id());
-
-    let records = sqlx::query_as::<_, FdnsRecord>(&GET_DOMAIN_SQL)
-        .bind(&qname)
-        .fetch_all(postgres)
-        .await
-        .unwrap();
+    
+    let postgres = postgres_t.await.unwrap();
+    let statement = postgres.prepare_cached(&GET_DOMAIN_SQL).await.unwrap();
+    let rows = postgres.query(&statement, &[&qname]).await.unwrap();
+    let records: Vec<FdnsRecord> = rows.iter().map(|r| {
+        FdnsRecord {
+            name: r.get(0),
+            record_type: r.get(1),
+            content: r.get(2),
+            ttl: r.get(3)
+        }
+    }).collect();
     log::trace!("[{}] Query for {qname} completed", message.id());
 
     // TODO: CNAME resolution
@@ -216,9 +223,7 @@ async fn handle_message(
                                 None
                             }
                         },
-                        RecordType::TXT => {
-                            Some(RData::TXT(TXT::new(vec![r.content.clone()])))
-                        }
+                        RecordType::TXT => Some(RData::TXT(TXT::new(vec![r.content.clone()]))),
                         RecordType::SOA => match parse_soa(&r.content) {
                             Ok(soa) => Some(RData::SOA(soa)),
                             Err(_) => {
@@ -238,14 +243,15 @@ async fn handle_message(
     log::trace!("[{}] Answers set", message.id());
 
     if message.answers().is_empty() {
-        log::debug!("[{}] No answers, querying to see if we're authoritative", message.id());
-        let zone_count: (i64,) = sqlx::query_as(&GET_ZONE_SQL)
-            .bind(&qname)
-            .fetch_one(postgres)
-            .await
-            .unwrap();
-        log::trace!("[{}] Query returned {} zones", message.id(), zone_count.0);
-        if zone_count.0 == 0 {
+        log::debug!(
+            "[{}] No answers, querying to see if we're authoritative",
+            message.id()
+        );
+        let statement = postgres.prepare_cached(&GET_ZONE_SQL).await.unwrap();
+        let count_row = postgres.query_one(&statement, &[&qname]).await.unwrap();
+        let zone_count: i64 = count_row.get(0);
+        log::trace!("[{}] Query returned {} zones", message.id(), zone_count);
+        if zone_count == 0 {
             message.set_response_code(ResponseCode::Refused);
         } else if records.is_empty() {
             message.set_response_code(ResponseCode::NXDomain);
