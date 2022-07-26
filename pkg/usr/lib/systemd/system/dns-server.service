@@ -1,5 +1,5 @@
 [Unit]
-Description=FDNS resolver
+Description=HOSTSdotTXT resolver
 After=network.target
 After=systemd-user-sessions.service
 After=network-online.target
@@ -7,7 +7,7 @@ After=network-online.target
 [Service]
 Type=simple
 Restart=always
-EnvironmentFile=/etc/fdns.env
+EnvironmentFile=/etc/hostsdottxt.env
 ExecStart=/usr/bin/dns-server
 
 [Install]

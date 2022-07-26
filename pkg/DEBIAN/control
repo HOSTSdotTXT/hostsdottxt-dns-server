@@ -6,4 +6,4 @@ Section: web
 Priority: optional
 Maintainer: Galen Guyer <galen@galenguyer.com>
 Installed-Size: 96
-Description: FDNS resolver
+Description: HOSTSdotTXT resolver

@@ -3,7 +3,7 @@ variable "PKGVER" {
 }
 
 group "default" {
-    targets = ["deb"]
+    targets = ["bin", "deb"]
 }
 
 target "bin" {
