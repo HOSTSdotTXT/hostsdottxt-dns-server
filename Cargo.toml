@@ -1,6 +1,6 @@
 [package]
 name = "dns-server"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2021"
 license = "MIT"
 
@@ -14,6 +14,7 @@ futures-util = "0.3.21"
 hostname = "0.3.1"
 lazy_static = "1.4.0"
 log = "0.4.17"
+rand = "0.8.5"
 sqlx = { git = "https://github.com/launchbadge/sqlx", features = ["postgres", "runtime-tokio-rustls", "ipnetwork"] }
 tokio = { version = "1.19.2", features = ["full"] }
 tokio-postgres = "0.7.6"

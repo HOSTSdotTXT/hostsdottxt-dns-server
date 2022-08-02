@@ -237,7 +237,7 @@ dependencies = [
 
 [[package]]
 name = "dns-server"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "deadpool-postgres",
  "dotenvy",
@@ -246,17 +246,12 @@ dependencies = [
  "hostname",
  "lazy_static",
  "log",
+ "rand",
  "sqlx",
  "tokio",
  "tokio-postgres",
  "trust-dns-proto",
 ]
-
-[[package]]
-name = "dotenv"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
 name = "dotenvy"
@@ -1079,7 +1074,7 @@ dependencies = [
 [[package]]
 name = "sqlx"
 version = "0.6.0"
-source = "git+https://github.com/launchbadge/sqlx#58712ae55263857c60c0df5f1adac8a076a74fab"
+source = "git+https://github.com/launchbadge/sqlx#7adbb7fefc402c59e47032ecb91afad2379644bc"
 dependencies = [
  "sqlx-core",
  "sqlx-macros",
@@ -1088,7 +1083,7 @@ dependencies = [
 [[package]]
 name = "sqlx-core"
 version = "0.6.0"
-source = "git+https://github.com/launchbadge/sqlx#58712ae55263857c60c0df5f1adac8a076a74fab"
+source = "git+https://github.com/launchbadge/sqlx#7adbb7fefc402c59e47032ecb91afad2379644bc"
 dependencies = [
  "ahash",
  "atoi",
@@ -1140,9 +1135,9 @@ dependencies = [
 [[package]]
 name = "sqlx-macros"
 version = "0.6.0"
-source = "git+https://github.com/launchbadge/sqlx#58712ae55263857c60c0df5f1adac8a076a74fab"
+source = "git+https://github.com/launchbadge/sqlx#7adbb7fefc402c59e47032ecb91afad2379644bc"
 dependencies = [
- "dotenv",
+ "dotenvy",
  "either",
  "heck",
  "once_cell",
@@ -1158,7 +1153,7 @@ dependencies = [
 [[package]]
 name = "sqlx-rt"
 version = "0.6.0"
-source = "git+https://github.com/launchbadge/sqlx#58712ae55263857c60c0df5f1adac8a076a74fab"
+source = "git+https://github.com/launchbadge/sqlx#7adbb7fefc402c59e47032ecb91afad2379644bc"
 dependencies = [
  "once_cell",
  "tokio",

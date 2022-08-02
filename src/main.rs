@@ -1,6 +1,7 @@
 use deadpool_postgres::{Manager, ManagerConfig, Pool};
 use futures_util::StreamExt;
 use lazy_static::lazy_static;
+use rand::seq::SliceRandom;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -167,22 +168,23 @@ async fn handle_message(
     let qname = query.name().to_string().to_lowercase();
     let qtype = query.query_type().to_string();
     log::trace!("[{}] Querying for {qname}", message.id());
-    
+
     let postgres = postgres_t.await.unwrap();
     let statement = postgres.prepare_cached(&GET_DOMAIN_SQL).await.unwrap();
     let rows = postgres.query(&statement, &[&qname]).await.unwrap();
-    let records: Vec<FdnsRecord> = rows.iter().map(|r| {
-        FdnsRecord {
+    let records: Vec<FdnsRecord> = rows
+        .iter()
+        .map(|r| FdnsRecord {
             name: r.get(0),
             record_type: r.get(1),
             content: r.get(2),
-            ttl: r.get(3)
-        }
-    }).collect();
+            ttl: r.get(3),
+        })
+        .collect();
     log::trace!("[{}] Query for {qname} completed", message.id());
 
     // TODO: CNAME resolution
-    message.add_answers(
+    message.add_answers(randomize_records(
         records
             .iter()
             .filter(|r| r.record_type == qtype)
@@ -193,7 +195,6 @@ async fn handle_message(
                     .set_rr_type(RecordType::from_str(&r.record_type).unwrap())
                     .set_name(Name::from_str(&r.name).unwrap())
                     .set_data(match RecordType::from_str(&r.record_type).unwrap() {
-                        // TODO: Uhh log these errors just in case
                         RecordType::A => match r.content.parse::<Ipv4Addr>() {
                             Ok(addr) => Some(RData::A(addr)),
                             Err(e) => {
@@ -208,6 +209,7 @@ async fn handle_message(
                                 None
                             }
                         },
+                        // TODO: Resolve these
                         RecordType::CNAME => match r.content.parse::<Name>() {
                             Ok(name) => Some(RData::CNAME(name)),
                             Err(e) => {
@@ -215,7 +217,6 @@ async fn handle_message(
                                 None
                             }
                         },
-                        // TODO: randomize the order of these
                         RecordType::NS => match r.content.parse::<Name>() {
                             Ok(name) => Some(RData::NS(name)),
                             Err(e) => {
@@ -238,8 +239,9 @@ async fn handle_message(
                     })
                     .clone()
             })
-            .filter(|r| r.data().is_some()),
-    );
+            .filter(|r| r.data().is_some())
+            .collect(),
+    ));
     log::trace!("[{}] Answers set", message.id());
 
     if message.answers().is_empty() {
@@ -316,4 +318,25 @@ fn get<T: FromStr>(parts: &[String], index: usize) -> Result<T, ()> {
         },
         None => Err(()),
     }
+}
+
+fn randomize_records(original_records: Vec<Record>) -> Vec<Record> {
+    let mut a_records: Vec<Record> = vec![];
+    let mut aaaa_records: Vec<Record> = vec![];
+    let mut ns_records: Vec<Record> = vec![];
+    let mut other_records: Vec<Record> = vec![];
+    for record in original_records {
+        match record.rr_type() {
+            RecordType::A => a_records.push(record),
+            RecordType::AAAA => aaaa_records.push(record),
+            RecordType::NS => ns_records.push(record),
+            _ => other_records.push(record),
+        }
+    }
+    let mut rng = rand::thread_rng();
+    a_records.shuffle(&mut rng);
+    aaaa_records.shuffle(&mut rng);
+    ns_records.shuffle(&mut rng);
+
+    [a_records, aaaa_records, ns_records, other_records].concat()
 }
