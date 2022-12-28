@@ -70,13 +70,15 @@ async fn main() {
     let pg_pool = Arc::new(Pool::builder(mgr).max_size(64).build().unwrap());
     log::info!("Connected to data postgres");
 
-    let metrics_pool = Arc::new(
-        PgPoolOptions::new()
-            .max_connections(12)
-            .connect(&env::var("METRICS_URL").expect("METRICS_URL not set"))
-            .await
-            .unwrap(),
-    );
+    let metrics_pool = Arc::new(None);
+
+    // let metrics_pool = Arc::new(Some(
+    //     PgPoolOptions::new()
+    //         .max_connections(12)
+    //         .connect(&env::var("METRICS_URL").expect("METRICS_URL not set"))
+    //         .await
+    //         .unwrap(),
+    // ));
     log::info!("Connected to metrics postgres");
 
     let addr = env::var("BIND_ADDR")
@@ -109,26 +111,32 @@ async fn main() {
                 log::trace!("Spawning new task");
                 tokio::spawn(async move {
                     let metrics = handle_message(raw_message, &pg_pool, sender).await;
-                    log::trace!("Packet handled, logging metrics");
-                    if let Ok(metrics) = metrics {
-                        let hostname = match hostname::get() {
-                            Ok(hostname) => hostname.to_str().unwrap_or("unknown").to_owned(),
-                            Err(_) => String::from("unknown"),
-                        };
-                        if metrics.duration_us > 5 * 1000 {
-                            log::warn!("Query took over 5ms: {} {}", metrics.qname, metrics.qtype)
-                        }
-                        if let Err(e) = sqlx::query(&INSERT_METRICS_SQL)
-                            .bind(&metrics.source_ip)
-                            .bind(&metrics.qname)
-                            .bind(&metrics.qtype)
-                            .bind(&metrics.rcode)
-                            .bind(metrics.duration_us)
-                            .bind(hostname)
-                            .execute(&*metrics_pool)
-                            .await
-                        {
-                            log::error!("{e}");
+                    if let Some(metrics_pool) = &*metrics_pool {
+                        log::trace!("Packet handled, logging metrics");
+                        if let Ok(metrics) = metrics {
+                            let hostname = match hostname::get() {
+                                Ok(hostname) => hostname.to_str().unwrap_or("unknown").to_owned(),
+                                Err(_) => String::from("unknown"),
+                            };
+                            if metrics.duration_us > 5 * 1000 {
+                                log::warn!(
+                                    "Query took over 5ms: {} {}",
+                                    metrics.qname,
+                                    metrics.qtype
+                                )
+                            }
+                            if let Err(e) = sqlx::query(&INSERT_METRICS_SQL)
+                                .bind(&metrics.source_ip)
+                                .bind(&metrics.qname)
+                                .bind(&metrics.qtype)
+                                .bind(&metrics.rcode)
+                                .bind(metrics.duration_us)
+                                .bind(hostname)
+                                .execute(metrics_pool)
+                                .await
+                            {
+                                log::error!("{e}");
+                            }
                         }
                     }
                 });
@@ -184,7 +192,7 @@ async fn handle_message(
     log::trace!("[{}] Query for {qname} completed", message.id());
 
     // TODO: CNAME resolution
-    message.add_answers(randomize_records(
+    message.add_answers(
         records
             .iter()
             .filter(|r| r.record_type == qtype)
@@ -239,9 +247,8 @@ async fn handle_message(
                     })
                     .clone()
             })
-            .filter(|r| r.data().is_some())
-            .collect(),
-    ));
+            .filter(|r| r.data().is_some()),
+    );
     log::trace!("[{}] Answers set", message.id());
 
     if message.answers().is_empty() {

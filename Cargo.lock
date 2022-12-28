@@ -237,7 +237,7 @@ dependencies = [
 
 [[package]]
 name = "dns-server"
-version = "0.1.10"
+version = "0.1.12"
 dependencies = [
  "deadpool-postgres",
  "dotenvy",
